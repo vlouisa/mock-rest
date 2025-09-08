@@ -37,12 +37,16 @@
 
     <properties>
         <assertj.version>3.27.4</assertj.version>
-        <spring.boot.version>3.5.5</spring.boot.version>
         <jackson.version>2.20.0</jackson.version>
         <java.version>21</java.version>
+        <junit.version>5.13.4</junit.version>
+        <logback.version>1.5.18</logback.version>
+        <lombok.version>1.18.40</lombok.version>
         <maven-doc.version>3.8.0</maven-doc.version>
         <maven-source.version>3.3.1</maven-source.version>
         <maven.compiler.version>3.13.0</maven.compiler.version>
+        <spring.boot.version>3.5.5</spring.boot.version>
+        <wiremock.version>2.35.0</wiremock.version>
 
         <maven.compiler.release>${java.version}</maven.compiler.release>
     </properties>
@@ -55,7 +59,18 @@
             <version>${spring.boot.version}</version>
             <scope>provided</scope>
         </dependency>
-
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <version>${spring.boot.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>${logback.version}</version>
+            <scope>provided</scope>
+        </dependency>
         <!-- Jackson for JSON serialization -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
@@ -63,8 +78,20 @@
             <version>${jackson.version}</version>
             <scope>provided</scope>
         </dependency>
-
-        <!-- Optional: AssertJ for fluent assertions -->
+        <!-- Lombok for boilerplate code reduction -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+        </dependency>
+        <!-- JUnit 5 for testing -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- AssertJ for fluent assertions -->
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
@@ -72,7 +99,6 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
     <build>
         <plugins>
             <!-- Attach sources -->
