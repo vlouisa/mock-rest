@@ -6,10 +6,16 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write  # Required to push commits and tags
+
 jobs:
   bump-version:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+
+    env:
+      JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.8-9/x64
 
     steps:
       # Step 1: Checkout repository
@@ -35,9 +41,8 @@ jobs:
       - name: Get merged branch
         id: get_branch
         run: |
-          MERGED_BRANCH="${{ github.event.pull_request.head.ref }}"
-          echo "Merged branch: $MERGED_BRANCH"
-          echo "merged_branch=$MERGED_BRANCH" >> $GITHUB_ENV
+          echo "merged_branch=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
+          echo "Merged branch: ${{ github.event.pull_request.head.ref }}"
 
       # Step 5: Validate branch prefix
       - name: Validate branch prefix
@@ -63,7 +68,7 @@ jobs:
       - name: Compute new version
         id: bump_version
         run: |
-          VERSION=${current_version%-SNAPSHOT}  # remove -SNAPSHOT
+          VERSION=${current_version%-SNAPSHOT}
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
 
           if [[ "$merged_branch" == feature/* ]]; then
@@ -79,6 +84,7 @@ jobs:
 
           NEW_VERSION="$MAJOR.$MINOR.$PATCH-SNAPSHOT"
           TAG_VERSION="$MAJOR.$MINOR.$PATCH"
+
           echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
           echo "tag_version=$TAG_VERSION" >> $GITHUB_ENV
           echo "Bumped version to $NEW_VERSION, tag: $TAG_VERSION"
@@ -88,17 +94,18 @@ jobs:
         run: mvn versions:set -DnewVersion=$new_version -DgenerateBackupPoms=false
 
       # Step 10: Commit and push changes using GITHUB_TOKEN
-      - name: Commit and push
+      - name: Commit and push version bump
         run: |
           git add pom.xml
           git commit -m "Bump version to $new_version [skip ci]" || echo "No changes to commit"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          git push origin HEAD
 
       # Step 11: Create and push Git tag using GITHUB_TOKEN
       - name: Create and push tag
         run: |
           git tag -a "$tag_version" -m "Release $tag_version"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} "$tag_version"
+          git push origin "$tag_version"
 
       # Step 12: Create GitHub release
       - name: Create GitHub release
