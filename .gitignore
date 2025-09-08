@@ -1,0 +1,6 @@
+#Generated stuff
+target/
+
+#IntelliJ
+.idea/
+*.iml
