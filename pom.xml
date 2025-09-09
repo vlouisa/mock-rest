@@ -7,7 +7,7 @@
 
     <groupId>dev.louisa.victor</groupId>
     <artifactId>mock-rest</artifactId>
-    <version>0.4.2-SNAPSHOT</version>
+    <version>0.5.0</version>
     <packaging>jar</packaging>
 
     <name>Mock Rest</name>
