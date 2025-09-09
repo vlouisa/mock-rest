@@ -1,6 +1,6 @@
 package dev.louisa.victor.mock.rest;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,16 +16,18 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.Function;
 
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@RequiredArgsConstructor
 @Slf4j
+@RequiredArgsConstructor
 public class MockRest {
     private final MockMvc mockMvc;
     private final ObjectMapper mapper;
 
+    // =========================
+    // === HTTP verb methods ===
+    // =========================
     public RequestBuilder post(String uri, Object... uriVars) {
         return new RequestBuilder(mockMvc, mapper, MockMvcRequestBuilders.post(resolveUri(uri, uriVars)));
     }
@@ -53,7 +55,9 @@ public class MockRest {
                 .toUriString();
     }
 
-    // --- Nested fluent RequestBuilder ---
+    // =============================
+    // === Nested RequestBuilder ===
+    // =============================
     @RequiredArgsConstructor
     public static class RequestBuilder {
         private final MockMvc mockMvc;
@@ -62,9 +66,9 @@ public class MockRest {
 
         private HttpStatus expectedStatus = null;
         private final Map<String, String> expectedResponseHeaders = new HashMap<>();
-
         private RequestPostProcessor userPostProcessor;
 
+        // --- request configuration ---
         public RequestBuilder body(Object body) throws Exception {
             request.content(mapper.writeValueAsString(body));
             request.contentType(MediaType.APPLICATION_JSON);
@@ -77,15 +81,11 @@ public class MockRest {
         }
 
         public RequestBuilder withJwt(String token) {
-            this.userPostProcessor = addTokenToRequest(token);
-            return this;
-        }
-
-        private RequestPostProcessor addTokenToRequest(String token) {
-            return request -> {
-                request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer " + token);
-                return request;
+            this.userPostProcessor = req -> {
+                req.addHeader(HttpHeaders.AUTHORIZATION, "Bearer " + token);
+                return req;
             };
+            return this;
         }
 
         public RequestBuilder expectResponseStatus(HttpStatus status) {
@@ -98,13 +98,11 @@ public class MockRest {
             return this;
         }
 
-        private ResultActions exchange() throws Exception {
-            ResultActions actions;
-            if (userPostProcessor != null) {
-                actions = mockMvc.perform(request.with(userPostProcessor));
-            } else {
-                actions = mockMvc.perform(request);
-            }
+        // --- intermediate termination: execute ---
+        public ResponseBuilder send() throws Exception {
+            ResultActions actions = (userPostProcessor != null)
+                    ? mockMvc.perform(request.with(userPostProcessor))
+                    : mockMvc.perform(request);
 
             logDetails(actions);
 
@@ -112,54 +110,25 @@ public class MockRest {
                 actions.andExpect(status().is(expectedStatus.value()));
             }
 
-            expectedResponseHeaders.forEach((key, value) -> assertResponseHeader(actions, key, value));
+            expectedResponseHeaders.forEach((k, v) -> assertResponseHeader(actions, k, v));
 
-            return actions;
+            return new ResponseBuilder(actions.andReturn(), mapper); // allow optional chaining
         }
 
+        // --- helpers ---
         private void assertResponseHeader(ResultActions actions, String key, String value) {
-            assertHeader(actions, key, value, r -> r.getResponse().getHeader(key), "response");
-        }
-
-        private static void assertHeader(ResultActions actions, String key, String value, Function<MvcResult, String> actualHeaderExtractor, String payloadType) {
             try {
-                actions.andExpect(r -> {
-                    String header = actualHeaderExtractor.apply(r);
+                actions.andExpect(r1 -> {
+                    String header = r1.getResponse().getHeader(key);
                     if (header == null) {
-                        throw new AssertionError("Expected " + payloadType + " header '" + key + "' to exist, but was not found");
+                        throw new AssertionError("Expected header '" + key + "' but not found");
                     }
                     if (!header.equals(value)) {
-                        throw new AssertionError("Expected " + payloadType + " header '" + key + "' to contain value '" + value + "', but was: " + header);
+                        throw new AssertionError("Expected header '" + key + "' value '" + value + "', but was: " + header);
                     }
                 });
             } catch (Exception e) {
                 throw new AssertionError(e);
-            }
-        }
-        public void expectNoResponseBody() throws Exception {
-            ResultActions actions = exchange();
-            MvcResult result = actions.andReturn();
-            String content = result.getResponse().getContentAsString();
-            if (!content.isBlank()) {
-                throw new AssertionError("Expected no body, but response contained: " + content);
-            }
-        }
-
-        public <T> T expectResponseBody(Class<T> type) throws Exception {
-            ResultActions actions = exchange(); // ensures status check runs if configured
-            MvcResult result = actions.andReturn();
-            final String content = result.getResponse().getContentAsString();
-            if (content.isBlank()) {
-                throw new AssertionError("Expected body of type '" + type.getSimpleName() + "', but no body present" + content);
-            }
-            return map(content, type);
-        }
-
-        private <T> T map(String json, Class<T> type) {
-            try {
-                return mapper.readValue(json, type);
-            } catch (JsonProcessingException e) {
-                throw new AssertionError("Failed to parse response body to " + type.getSimpleName() + ": " + json, e);
             }
         }
 
@@ -171,5 +140,36 @@ public class MockRest {
             log.info("----- END REQUEST/RESPONSE LOGGING -----");
         }
 
+
+        // ==============================
+        // === Nested ResponseBuilder ===
+        // ==============================
+        @RequiredArgsConstructor
+        public static class ResponseBuilder {
+            private final MvcResult result;
+            private final ObjectMapper mapper;
+
+            // --- optional: fetch and deserialize response body ---
+            public <T> T andReturn(Class<T> type) throws Exception {
+                return parseResponse(type, null);
+            }
+
+            public <T> T andReturn(TypeReference<T> typeRef) throws Exception {
+                return parseResponse(null, typeRef);
+            }
+
+            // --- internal helper ---
+            private <T> T parseResponse(Class<T> clazz, TypeReference<T> typeRef) throws Exception {
+                String content = result.getResponse().getContentAsString();
+                try {
+                    return typeRef != null
+                            ? mapper.readValue(content, typeRef)
+                            : mapper.readValue(content, clazz);
+                } catch (Exception e) {
+                    String typeName = (clazz != null) ? clazz.getSimpleName() : "generic type";
+                    throw new AssertionError("Failed to parse response body to " + typeName + ": " + content, e);
+                }
+            }
+        }
     }
 }
