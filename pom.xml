@@ -29,6 +29,14 @@
         </developer>
     </developers>
 
+    <distributionManagement>
+        <repository>
+            <id>github-vlouisa</id>
+            <name>GitHub vlouisa Apache Maven Packages</name> 
+            <url>https://maven.pkg.github.com/vlouisa/mock-rest</url>
+        </repository>
+    </distributionManagement>
+
     <scm>
         <connection>scm:git:git://github.com/vlouisa/mock-rest.git</connection>
         <developerConnection>scm:git:ssh://github.com:vlouisa/mock-rest.git</developerConnection>
