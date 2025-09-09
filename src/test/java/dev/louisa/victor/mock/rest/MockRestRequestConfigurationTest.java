@@ -30,7 +30,7 @@ class MockRestRequestConfigurationTest extends BaseTest<User> {
     }
 
     @Test
-    void shouldNotThrowWhenResponseStatusIsAsExpected() throws Exception {
+    void shouldNotThrowWhenResponseStatusIsAsExpected() {
         when(controller.getUser(GRISWOLD_UUID))
                 .thenReturn(response(I_AM_A_TEAPOT, GRISWOLD));
 
@@ -44,7 +44,7 @@ class MockRestRequestConfigurationTest extends BaseTest<User> {
     }
 
     @Test
-    void shouldThrowWhenResponseStatusIsNotAsExpected() throws Exception {
+    void shouldThrowWhenResponseStatusIsNotAsExpected() {
         when(controller.getUser(GRISWOLD_UUID))
                 .thenReturn(response(I_AM_A_TEAPOT, GRISWOLD));
 
@@ -74,7 +74,7 @@ class MockRestRequestConfigurationTest extends BaseTest<User> {
     }
 
     @Test
-    void shouldThrowWhenResponseHeadersAreNotAsExpected() throws Exception {
+    void shouldThrowWhenResponseHeadersAreNotAsExpected() {
         when(controller.getUser(GRISWOLD_UUID))
                 .thenReturn(response(I_AM_A_TEAPOT, GRISWOLD));
 
@@ -85,12 +85,12 @@ class MockRestRequestConfigurationTest extends BaseTest<User> {
                         .expectResponseHeader("Content-Type", "application/json")
                         .send())
                 .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("Expected header 'x-response-header' but not found");
+                .hasMessageContaining("Expected header 'x-response-header' but it was not found");
 
     }
 
     @Test
-    void shouldThrowWhenResponseHeaderValueIsNotAsExpected() throws Exception {
+    void shouldThrowWhenResponseHeaderValueIsNotAsExpected() {
         when(controller.getUser(GRISWOLD_UUID))
                 .thenReturn(response(I_AM_A_TEAPOT, GRISWOLD, RESPONSE_HEADERS));
 
@@ -100,6 +100,6 @@ class MockRestRequestConfigurationTest extends BaseTest<User> {
                         .expectResponseHeader("x-response-header", "GTA VI is coming out in 2026!")
                         .send())
                 .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("Expected header 'x-response-header' value 'GTA VI is coming out in 2026!', but was: Monkey Island 2 rules!");
+                .hasMessageContaining("Expected header 'x-response-header' value 'GTA VI is coming out in 2026!', but was 'Monkey Island 2 rules!'");
     }
 }

@@ -3,6 +3,7 @@ package dev.louisa.victor.mock.rest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.test.web.servlet.ResultActions;
 
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
@@ -11,7 +12,15 @@ import java.util.Objects;
 @Slf4j
 public class MockRestLogger {
 
-    public static void log(MockHttpServletRequest built) {
+    public static void log(ResultActions actions) {
+        log.info("------------ REQUEST DETAILS -----------");
+        MockRestLogger.log(actions.andReturn().getRequest());
+        log.info("----------- RESPONSE DETAILS -----------");
+        MockRestLogger.log(actions.andReturn().getResponse());
+        log.info("----- END REQUEST/RESPONSE LOGGING -----");
+    }
+
+    private static void log(MockHttpServletRequest built) {
         try {
             log.info("HTTP " + built.getMethod() + " " + built.getRequestURI());
 
@@ -38,7 +47,7 @@ public class MockRestLogger {
         }
     }
 
-    public static void log(MockHttpServletResponse response) {
+    private static void log(MockHttpServletResponse response) {
         log.info("HTTP STATUS {}", response.getStatus());
 
         // Headers

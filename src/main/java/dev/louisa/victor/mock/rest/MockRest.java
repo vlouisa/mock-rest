@@ -2,22 +2,19 @@ package dev.louisa.victor.mock.rest;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.louisa.victor.mock.rest.config.RequestConfigurer;
+import dev.louisa.victor.mock.rest.config.ResponseExpectation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
-import java.util.HashMap;
-import java.util.Map;
-
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -64,111 +61,79 @@ public class MockRest {
         private final ObjectMapper mapper;
         private final MockHttpServletRequestBuilder request;
 
-        private HttpStatus expectedStatus = null;
-        private final Map<String, String> expectedResponseHeaders = new HashMap<>();
-        private RequestPostProcessor userPostProcessor;
+        private final List<RequestConfigurer> configurers = new ArrayList<>();
+        private final List<ResponseExpectation> expectations = new ArrayList<>();
 
         // --- request configuration ---
-        public RequestBuilder body(Object body) throws Exception {
-            request.content(mapper.writeValueAsString(body));
-            request.contentType(MediaType.APPLICATION_JSON);
+        public RequestBuilder body(Object body) {
+            configurers.add(RequestConfigurer.body(mapper, body));
             return this;
         }
 
         public RequestBuilder withRequestHeader(String name, String value) {
-            request.header(name, value);
+            configurers.add(RequestConfigurer.header(name, value));
             return this;
         }
 
         public RequestBuilder withJwt(String token) {
-            this.userPostProcessor = req -> {
-                req.addHeader(HttpHeaders.AUTHORIZATION, "Bearer " + token);
-                return req;
-            };
+            configurers.add(RequestConfigurer.jwt(token));
             return this;
         }
 
         public RequestBuilder expectResponseStatus(HttpStatus status) {
-            this.expectedStatus = status;
+            expectations.add(ResponseExpectation.expectedStatus(status));
             return this;
         }
 
         public RequestBuilder expectResponseHeader(String name, String value) {
-            expectedResponseHeaders.put(name, value);
+            expectations.add(ResponseExpectation.expectedHeader(name, value));
             return this;
         }
 
         // --- intermediate termination: execute ---
         public ResponseBuilder send() throws Exception {
-            ResultActions actions = (userPostProcessor != null)
-                    ? mockMvc.perform(request.with(userPostProcessor))
-                    : mockMvc.perform(request);
-
-            logDetails(actions);
-
-            if (expectedStatus != null) {
-                actions.andExpect(status().is(expectedStatus.value()));
-            }
-
-            expectedResponseHeaders.forEach((k, v) -> assertResponseHeader(actions, k, v));
-
-            return new ResponseBuilder(actions.andReturn(), mapper); // allow optional chaining
+            final ResultActions actions = mockMvc.perform(configuredRequest());
+            expectations.forEach(exp -> exp.apply(actions));
+            
+            MockRestLogger.log(actions);
+            return new ResponseBuilder(actions.andReturn(), mapper);
         }
 
-        // --- helpers ---
-        private void assertResponseHeader(ResultActions actions, String key, String value) {
+        private MockHttpServletRequestBuilder configuredRequest() {
+            configurers
+                    .forEach(cfg -> cfg.apply(request));
+            return request;
+        }
+
+    }
+
+
+    // ==============================
+    // === Nested ResponseBuilder ===
+    // ==============================
+    @RequiredArgsConstructor
+    public static class ResponseBuilder {
+        private final MvcResult result;
+        private final ObjectMapper mapper;
+
+        public <T> T andReturn(Class<T> type) throws Exception {
+            return parseResponse(type, null);
+        }
+
+        public <T> T andReturn(TypeReference<T> typeRef) throws Exception {
+            return parseResponse(null, typeRef);
+        }
+
+        // --- internal helper ---
+        private <T> T parseResponse(Class<T> clazz, TypeReference<T> typeRef) throws Exception {
+            String content = result.getResponse().getContentAsString();
             try {
-                actions.andExpect(r1 -> {
-                    String header = r1.getResponse().getHeader(key);
-                    if (header == null) {
-                        throw new AssertionError("Expected header '" + key + "' but not found");
-                    }
-                    if (!header.equals(value)) {
-                        throw new AssertionError("Expected header '" + key + "' value '" + value + "', but was: " + header);
-                    }
-                });
+                return typeRef != null
+                        ? mapper.readValue(content, typeRef)
+                        : mapper.readValue(content, clazz);
             } catch (Exception e) {
-                throw new AssertionError(e);
-            }
-        }
-
-        private void logDetails(ResultActions actions) {
-            log.info("------------ REQUEST DETAILS -----------");
-            MockRestLogger.log(actions.andReturn().getRequest());
-            log.info("----------- RESPONSE DETAILS -----------");
-            MockRestLogger.log(actions.andReturn().getResponse());
-            log.info("----- END REQUEST/RESPONSE LOGGING -----");
-        }
-
-
-        // ==============================
-        // === Nested ResponseBuilder ===
-        // ==============================
-        @RequiredArgsConstructor
-        public static class ResponseBuilder {
-            private final MvcResult result;
-            private final ObjectMapper mapper;
-
-            // --- optional: fetch and deserialize response body ---
-            public <T> T andReturn(Class<T> type) throws Exception {
-                return parseResponse(type, null);
-            }
-
-            public <T> T andReturn(TypeReference<T> typeRef) throws Exception {
-                return parseResponse(null, typeRef);
-            }
-
-            // --- internal helper ---
-            private <T> T parseResponse(Class<T> clazz, TypeReference<T> typeRef) throws Exception {
-                String content = result.getResponse().getContentAsString();
-                try {
-                    return typeRef != null
-                            ? mapper.readValue(content, typeRef)
-                            : mapper.readValue(content, clazz);
-                } catch (Exception e) {
-                    String typeName = (clazz != null) ? clazz.getSimpleName() : "generic type";
-                    throw new AssertionError("Failed to parse response body to " + typeName + ": " + content, e);
-                }
+                String typeName = (clazz != null) ? clazz.getSimpleName() : "generic type";
+                throw new AssertionError("Failed to parse response body to " + typeName + ": " + content, e);
             }
         }
     }
