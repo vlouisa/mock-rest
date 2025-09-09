@@ -64,8 +64,8 @@ jobs:
           echo "current_version=$CURRENT_VERSION" >> $GITHUB_ENV
           echo "Current version: $CURRENT_VERSION"
 
-      # Step 8: Compute new version
-      - name: Compute new version
+      # Step 8: Compute release and next snapshot versions
+      - name: Compute release and next snapshot
         id: bump_version
         run: |
           VERSION=${current_version%-SNAPSHOT}
@@ -82,26 +82,27 @@ jobs:
             PATCH=0
           fi
 
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH-SNAPSHOT"
-          TAG_VERSION="$MAJOR.$MINOR.$PATCH"
+          RELEASE_VERSION="$MAJOR.$MINOR.$PATCH"
+          NEXT_SNAPSHOT="$MAJOR.$MINOR.$((PATCH + 1))-SNAPSHOT"
 
-          echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
-          echo "tag_version=$TAG_VERSION" >> $GITHUB_ENV
-          echo "Bumped version to $NEW_VERSION, tag: $TAG_VERSION"
+          echo "release_version=$RELEASE_VERSION" >> $GITHUB_ENV
+          echo "next_snapshot=$NEXT_SNAPSHOT" >> $GITHUB_ENV
+          echo "tag_version=$RELEASE_VERSION" >> $GITHUB_ENV
+          echo "Release version: $RELEASE_VERSION, Next snapshot: $NEXT_SNAPSHOT"
 
-      # Step 9: Set Maven version
-      - name: Set Maven version
-        run: mvn versions:set -DnewVersion=$new_version -DgenerateBackupPoms=false
+      # Step 9: Set Maven to release version
+      - name: Set Maven release version
+        run: mvn versions:set -DnewVersion=$release_version -DgenerateBackupPoms=false
 
-      # Step 10: Commit and push changes using GITHUB_TOKEN
-      - name: Commit and push version bump
+      # Step 10: Commit and push release version (optional)
+      - name: Commit release version
         run: |
           git add pom.xml
-          git commit -m "Bump version to $new_version [skip ci]" || echo "No changes to commit"
+          git commit -m "Set release version $release_version [skip ci]" || echo "No changes to commit"
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
           git push origin HEAD
 
-      # Step 11: Create and push Git tag using GITHUB_TOKEN
+      # Step 11: Create and push Git tag
       - name: Create and push tag
         run: |
           git tag -a "$tag_version" -m "Release $tag_version"
@@ -114,11 +115,10 @@ jobs:
           tag_name: ${{ env.tag_version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  
-      # Step 13: Deploy to GitHub Packages
+
+      # Step 13: Deploy release to GitHub Packages
       - name: Deploy to GitHub Packages
         run: |
-          # Create Maven settings.xml with GitHub Packages authentication
           mkdir -p $HOME/.m2
           cat <<EOF > $HOME/.m2/settings.xml
           <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
@@ -126,14 +126,21 @@ jobs:
             xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
             <servers>
               <server>
-                <id>github-vlouisa</id>  <!-- Must match <id> in pom.xml distributionManagement -->
+                <id>github-vlouisa</id>
                 <username>vlouisa</username>
                 <password>${GITHUB_TOKEN}</password>
-              </server>
-            </servers>
-          </settings>
+                </server>
+                </servers>
+              </settings>
           EOF
           mvn clean deploy
-        
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PACKAGES_PAT }}
+
+      # Step 14: Bump to next snapshot
+      - name: Bump to next snapshot
+        run: |
+          mvn versions:set -DnewVersion=$next_snapshot -DgenerateBackupPoms=false
+          git add pom.xml
+          git commit -m "Bump version to $next_snapshot [skip ci]" || echo "No changes to commit"
+          git push origin HEAD
